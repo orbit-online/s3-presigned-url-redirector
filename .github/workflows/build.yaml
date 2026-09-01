@@ -28,7 +28,7 @@ jobs:
       # below still builds every Dockerfile to catch breakage.
       - name: Log in to ghcr.io
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
