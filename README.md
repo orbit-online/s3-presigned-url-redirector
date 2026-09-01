@@ -40,9 +40,6 @@ Options:
   -m --method METHOD  Methods to whitelist for signing [default: HEAD,GET]
 ```
 
-Log verbosity is controlled with the `LOGLEVEL` environment variable
-(`debug`, `verbose`, `info`, `warning`, `error`).
-
 Example:
 
 ```sh
