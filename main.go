@@ -46,7 +46,7 @@ Options:
   --ttl SECONDS       Expiry of the signed URLs in seconds [default: 900]
   --addr ADDR         Address to listen on [default: :3000]
   --metrics ADDR      Address to serve metrics on, "" to disable [default: :3001]
-  -m --method METHOD  Methods to whitelist for signing [default: HEAD,GET]
+  -m --method METHOD  Methods to whitelist for signing [default: HEAD GET]
 `)
 	if err != nil {
 		os.Stderr.WriteString(err.Error())
