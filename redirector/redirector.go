@@ -30,7 +30,7 @@ func Serve(ctx context.Context, addr string, allowedMethods []string, bucket str
 	proxiedBytes := promauto.NewCounter(prometheus.CounterOpts{
 		Namespace: "s3_presigned_url_redirector",
 		Name:      "put_bytes_proxied",
-		Help:      "Number of bytes proxied for PUT requests without 'Expect: 101-continue' header",
+		Help:      "Number of bytes proxied for PUT requests without 'Expect: 100-continue' header",
 	})
 	deniedCounter := promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "s3_presigned_url_redirector",
@@ -82,10 +82,6 @@ func Serve(ctx context.Context, addr string, allowedMethods []string, bucket str
 				Bucket: &bucket,
 				Key:    &key,
 			}, s3.WithPresignExpires(ttl))
-		case "POST":
-			// POST is a whole different animal. Skip it.
-			errorsCounter.WithLabelValues("unsupported-method").Inc()
-			return nil, fmt.Errorf("The POST method is explicitly not supported")
 		default:
 			errorsCounter.WithLabelValues("unsupported-method").Inc()
 			return nil, fmt.Errorf("Unsupported method %s", method)
@@ -96,7 +92,6 @@ func Serve(ctx context.Context, addr string, allowedMethods []string, bucket str
 	serveMux.Handle("/{path...}", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if !slices.Contains(allowedMethods, req.Method) {
 			deniedCounter.WithLabelValues(req.Method).Inc()
-			w.WriteHeader(http.StatusMethodNotAllowed)
 			http.Error(w, fmt.Sprintf("Method not allowed: %s", req.Method), http.StatusMethodNotAllowed)
 			return
 		}
@@ -118,14 +113,25 @@ func Serve(ctx context.Context, addr string, allowedMethods []string, bucket str
 			if err != nil {
 				slog.Error(err.Error())
 				http.Error(w, fmt.Sprintf("Failed to create proxy request for the signed URL '%s'", signedUrl), http.StatusInternalServerError)
+				return
 			}
 			proxiedCounter.Inc()
 			proxyRes, err := http.DefaultClient.Do(proxyReq)
 			if err != nil {
 				slog.Error(err.Error())
 				http.Error(w, fmt.Sprintf("Failed to execute proxy request for the signed URL '%s'", signedUrl), http.StatusInternalServerError)
+				return
 			}
-			proxyRes.Write(w)
+			defer proxyRes.Body.Close()
+			for k, h := range proxyRes.Header {
+				for _, v := range h {
+					w.Header().Add(k, v)
+				}
+			}
+			w.WriteHeader(proxyRes.StatusCode)
+			if _, err := io.Copy(w, proxyRes.Body); err != nil {
+				slog.Error(err.Error())
+			}
 			return
 		}
 		http.Redirect(w, req, signedUrl, http.StatusTemporaryRedirect)
@@ -135,8 +141,8 @@ func Serve(ctx context.Context, addr string, allowedMethods []string, bucket str
 	serveErr := make(chan error)
 	go func() { serveErr <- server.ListenAndServe() }()
 	slog.Info("Startup completed")
-	probesReady = true
-	probesHealthy = true
+	probesReady.Store(true)
+	probesHealthy.Store(true)
 	select {
 	case <-ctx.Done():
 		return server.Shutdown(ctx)
@@ -156,6 +162,6 @@ func (w *countingReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (w *countingReader) Close() {
-	w.ReadCloser.Close()
+func (w *countingReader) Close() error {
+	return w.ReadCloser.Close()
 }

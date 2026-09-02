@@ -3,10 +3,11 @@ package redirector
 import (
 	"context"
 	"net/http"
+	"sync/atomic"
 )
 
-var probesReady = false
-var probesHealthy = false
+var probesReady = atomic.Bool{}
+var probesHealthy = atomic.Bool{}
 
 func ServeProbes(ctx context.Context, addr string) error {
 	serveMux := http.NewServeMux()
@@ -14,14 +15,14 @@ func ServeProbes(ctx context.Context, addr string) error {
 		w.WriteHeader(http.StatusOK)
 	}))
 	serveMux.Handle("/ready", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if probesReady {
+		if probesReady.Load() {
 			w.WriteHeader(http.StatusOK)
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}))
 	serveMux.Handle("/healthz", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if probesHealthy {
+		if probesHealthy.Load() {
 			w.WriteHeader(http.StatusOK)
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)
