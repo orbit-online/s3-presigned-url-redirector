@@ -23,6 +23,7 @@ type Params struct {
 	Addr        string   `docopt:"--addr"`
 	MetricsAddr string   `docopt:"--metrics"`
 	ProbesAddr  string   `docopt:"--probes"`
+	ProxyPuts   bool     `docopt:"--proxy-puts"`
 }
 
 func main() {
@@ -49,6 +50,7 @@ Options:
   --metrics ADDR      Address to serve metrics on, "" to disable [default: :3001]
   --probes ADDR       Address to serve probes on, "" to disable [default: :3002]
   -m --method METHOD  Methods to whitelist for signing [default: HEAD GET]
+  --proxy-puts        Proxy PUT requests without a "Expect: 100-continue" header
 `)
 	if err != nil {
 		os.Stderr.WriteString(err.Error())
@@ -79,7 +81,7 @@ func serve(parentCtx context.Context, params Params) error {
 	}
 	wg, ctx := errgroup.WithContext(signalCtx)
 	wg.Go(func() error {
-		return redirector.Serve(ctx, params.Addr, params.Methods, params.Bucket, time.Duration(ttl)*time.Second)
+		return redirector.Serve(ctx, params.Addr, params.Methods, params.Bucket, time.Duration(ttl)*time.Second, params.ProxyPuts)
 	})
 	if params.MetricsAddr != "" {
 		wg.Go(func() error { return redirector.ServeMetrics(ctx, params.MetricsAddr) })

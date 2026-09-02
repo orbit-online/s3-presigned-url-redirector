@@ -3,6 +3,7 @@ package redirector
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -15,12 +16,22 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-func Serve(ctx context.Context, addr string, allowedMethods []string, bucket string, ttl time.Duration) error {
+func Serve(ctx context.Context, addr string, allowedMethods []string, bucket string, ttl time.Duration, proxyPuts bool) error {
 	methodCounter := promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "s3_presigned_url_redirector",
 		Name:      "requests_total",
 		Help:      "Number of requests received",
 	}, prometheus.UnconstrainedLabels{"method"})
+	proxiedCounter := promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "s3_presigned_url_redirector",
+		Name:      "put_request_proxied",
+		Help:      "Number of PUT requests proxied",
+	})
+	proxiedBytes := promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "s3_presigned_url_redirector",
+		Name:      "put_bytes_proxied",
+		Help:      "Number of bytes proxied for PUT requests without 'Expect: 101-continue' header",
+	})
 	deniedCounter := promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "s3_presigned_url_redirector",
 		Name:      "requests_denied",
@@ -82,20 +93,42 @@ func Serve(ctx context.Context, addr string, allowedMethods []string, bucket str
 	}
 
 	serveMux := http.NewServeMux()
-	serveMux.Handle("/{path...}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !slices.Contains(allowedMethods, r.Method) {
-			deniedCounter.WithLabelValues(r.Method).Inc()
+	serveMux.Handle("/{path...}", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if !slices.Contains(allowedMethods, req.Method) {
+			deniedCounter.WithLabelValues(req.Method).Inc()
 			w.WriteHeader(http.StatusMethodNotAllowed)
-			http.Error(w, fmt.Sprintf("Method not allowed: %s", r.Method), http.StatusMethodNotAllowed)
-		} else {
-			if signedReq, err := signReq(r.Method, r.PathValue("path")); err != nil {
-				errorsCounter.WithLabelValues("signing").Inc()
-				slog.Error(err.Error())
-				http.Error(w, "Failed to sign URL", http.StatusInternalServerError)
-			} else {
-				http.Redirect(w, r, signedReq.URL, http.StatusTemporaryRedirect)
-			}
+			http.Error(w, fmt.Sprintf("Method not allowed: %s", req.Method), http.StatusMethodNotAllowed)
+			return
 		}
+		var signedUrl string
+		if signedReq, err := signReq(req.Method, req.PathValue("path")); err != nil {
+			errorsCounter.WithLabelValues("signing").Inc()
+			slog.Error(err.Error())
+			http.Error(w, "Failed to sign URL", http.StatusInternalServerError)
+			return
+		} else {
+			signedUrl = signedReq.URL
+		}
+		if req.Method == "PUT" && !slices.Contains(req.Header["Expect"], "100-continue") {
+			if !proxyPuts {
+				http.Error(w, "You sent a PUT request without the 'Expect: 100-continue' header, but this server does not have proxying of PUT requests enabled.", http.StatusBadRequest)
+				return
+			}
+			proxyReq, err := http.NewRequest("PUT", signedUrl, &countingReader{ReadCloser: req.Body, counter: proxiedBytes})
+			if err != nil {
+				slog.Error(err.Error())
+				http.Error(w, fmt.Sprintf("Failed to create proxy request for the signed URL '%s'", signedUrl), http.StatusInternalServerError)
+			}
+			proxiedCounter.Inc()
+			proxyRes, err := http.DefaultClient.Do(proxyReq)
+			if err != nil {
+				slog.Error(err.Error())
+				http.Error(w, fmt.Sprintf("Failed to execute proxy request for the signed URL '%s'", signedUrl), http.StatusInternalServerError)
+			}
+			proxyRes.Write(w)
+			return
+		}
+		http.Redirect(w, req, signedUrl, http.StatusTemporaryRedirect)
 	}))
 
 	server := http.Server{Addr: addr, Handler: serveMux}
@@ -110,4 +143,19 @@ func Serve(ctx context.Context, addr string, allowedMethods []string, bucket str
 	case err := <-serveErr:
 		return err
 	}
+}
+
+type countingReader struct {
+	io.ReadCloser
+	counter prometheus.Counter
+}
+
+func (w *countingReader) Read(p []byte) (int, error) {
+	n, err := w.ReadCloser.Read(p)
+	w.counter.Add(float64(n))
+	return n, err
+}
+
+func (w *countingReader) Close() {
+	w.ReadCloser.Close()
 }
