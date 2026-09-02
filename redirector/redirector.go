@@ -82,7 +82,7 @@ func Serve(ctx context.Context, addr string, allowedMethods []string, bucket str
 	}
 
 	serveMux := http.NewServeMux()
-	serveMux.Handle("{/path...}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	serveMux.Handle("/{path...}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !slices.Contains(allowedMethods, r.Method) {
 			deniedCounter.WithLabelValues(r.Method).Inc()
 			w.WriteHeader(http.StatusMethodNotAllowed)
