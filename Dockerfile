@@ -8,6 +8,12 @@ ARG TARGETOS
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/s3-presigned-url-redirector .
 
+
+FROM alpine:latest AS ca-certs
+RUN apk add --no-cache ca-certificates
+
+
 FROM scratch
+COPY --from=ca-certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/s3-presigned-url-redirector /s3-presigned-url-redirector
 ENTRYPOINT ["/s3-presigned-url-redirector"]
