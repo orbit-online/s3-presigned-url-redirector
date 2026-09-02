@@ -46,9 +46,9 @@ Usage:
 
 Options:
   --ttl SECONDS       Expiry of the signed URLs in seconds [default: 900]
-  --addr ADDR         Address to listen on [default: :3000]
-  --metrics ADDR      Address to serve metrics on, "" to disable [default: :3001]
-  --probes ADDR       Address to serve probes on, "" to disable [default: :3002]
+  --addr ADDR         Redirector listening address [default: :3000]
+  --metrics ADDR      Metrics listening address, "" to disable [default: :3001]
+  --probes ADDR       Probes listening address, "" to disable [default: :3002]
   -m --method METHOD  Methods to whitelist for signing [default: HEAD GET]
   --proxy-puts        Proxy PUT requests without a "Expect: 100-continue" header
 `)
