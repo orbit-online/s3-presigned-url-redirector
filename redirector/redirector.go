@@ -101,6 +101,7 @@ func Serve(ctx context.Context, addr string, allowedMethods []string, bucket str
 	server := http.Server{Addr: addr, Handler: serveMux}
 	serveErr := make(chan error)
 	go func() { serveErr <- server.ListenAndServe() }()
+	slog.Info("Startup completed")
 	select {
 	case <-ctx.Done():
 		return server.Shutdown(ctx)
