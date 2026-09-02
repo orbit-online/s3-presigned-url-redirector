@@ -102,6 +102,8 @@ func Serve(ctx context.Context, addr string, allowedMethods []string, bucket str
 	serveErr := make(chan error)
 	go func() { serveErr <- server.ListenAndServe() }()
 	slog.Info("Startup completed")
+	probesReady = true
+	probesHealthy = true
 	select {
 	case <-ctx.Done():
 		return server.Shutdown(ctx)

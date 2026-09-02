@@ -22,6 +22,7 @@ type Params struct {
 	TTL         string   `docopt:"--ttl"`
 	Addr        string   `docopt:"--addr"`
 	MetricsAddr string   `docopt:"--metrics"`
+	ProbesAddr  string   `docopt:"--probes"`
 }
 
 func main() {
@@ -46,6 +47,7 @@ Options:
   --ttl SECONDS       Expiry of the signed URLs in seconds [default: 900]
   --addr ADDR         Address to listen on [default: :3000]
   --metrics ADDR      Address to serve metrics on, "" to disable [default: :3001]
+  --probes ADDR       Address to serve probes on, "" to disable [default: :3002]
   -m --method METHOD  Methods to whitelist for signing [default: HEAD GET]
 `)
 	if err != nil {
@@ -81,6 +83,9 @@ func serve(parentCtx context.Context, params Params) error {
 	})
 	if params.MetricsAddr != "" {
 		wg.Go(func() error { return redirector.ServeMetrics(ctx, params.MetricsAddr) })
+	}
+	if params.ProbesAddr != "" {
+		wg.Go(func() error { return redirector.ServeProbes(ctx, params.ProbesAddr) })
 	}
 	return wg.Wait()
 }
