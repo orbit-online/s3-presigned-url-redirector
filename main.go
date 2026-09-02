@@ -59,14 +59,13 @@ Options:
 	params := Params{}
 	err = parser.Bind(&params)
 	if err != nil {
-		slog.Error(err.Error())
+		os.Stderr.WriteString(err.Error())
 		os.Exit(1)
 	}
 	if params.Serve {
 		err = serve(context.Background(), params)
 	}
 	if err != nil {
-		os.Stderr.WriteString(err.Error())
 		slog.Error(err.Error())
 		os.Exit(1)
 	}
