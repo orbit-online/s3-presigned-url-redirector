@@ -3,7 +3,7 @@ module github.com/orbit-online/s3-presigned-url-redirector
 go 1.27.0
 
 require (
-	github.com/aws/aws-sdk-go-v2 v1.46.0
+	github.com/aws/aws-sdk-go-v2 v1.47.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.2
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.111.0
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
